@@ -8,8 +8,8 @@ __pycache__/
 
 # data file
 *.csv
-mlp/data
-
+*/data
+*.pkl
 
 # Distribution / packaging
 .Python

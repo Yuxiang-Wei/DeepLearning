@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time    : 19-5-10
+# @Time    : 19-5-16
 # @Author  : wyxiang
-# @File    : mlp.py
-# @Env: Ubuntu16.04 Python3.6 Pytorch0.4.1
+# @File    : model.py
+# @Env: Ubuntu16.04 Python3.6
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torch.utils.data.dataloader import DataLoader
-from optparse import OptionParser
-import os
 
 # 判断CUDA是否可用
 if torch.cuda.is_available():
@@ -21,25 +19,41 @@ else:
 
 print('Using PyTorch version:', torch.__version__, ' Device:', device)
 
-img_size = 28
-output_size = 10
-model_dir = './checkpoints/lastest.pkl' # 模型存放地址
 
+class AlexNet(nn.Module):
 
-# 定义模型
-class MLP(nn.Module):
-    def __init__(self):
-        super(MLP, self).__init__()
-        self.linear1 = nn.Linear(img_size * img_size, 1024)  # 隐层1, [784,1] -> [1024,1]
-        self.linear2 = nn.Linear(1024, 256)  # 隐层2, [1024,1] -> [256,1]
-        self.linear3 = nn.Linear(256, output_size)  # 隐层3 [256,1] -> [10,1]
+    def __init__(self, num_classes=10):
+        super(AlexNet, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, stride=2, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(64, 128, kernel_size=5, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.avgpool = nn.AdaptiveAvgPool2d((6, 6))
+        self.classifier = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(64 * 6 * 6, 2048),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(2048, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, num_classes),
+        )
 
     def forward(self, x):
-        # 将图片展开成一维，以匹配的输入层大小，即[batch, 1, img_size, img_size] -> [batch, img_size*img_size]
-        x = x.view(-1, img_size * img_size)
-        x = F.relu(self.linear1(x))  # 经过隐层1并使用relu函数激活
-        x = F.relu(self.linear2(x))  # 经过隐层2并使用relu函数激活
-        return F.log_softmax(self.linear3(x), dim=1)  # 经过隐层3，并最终经过一个log_softmax层做分类输出
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), 64 * 6 * 6)
+        x = self.classifier(x)
+        return x
 
 
 def load_data(train=True, batch_size=50):
@@ -51,13 +65,14 @@ def load_data(train=True, batch_size=50):
     """
 
     # 加载MNIST数据集，若不存在则下载
-    dataset = datasets.MNIST('./data',
-                             train=train,
-                             download=True,
-                             transform=transforms.ToTensor())
+    dataset = datasets.CIFAR10('./data',
+                               train=train,
+                               download=True,
+                               transform=transforms.ToTensor())
     if train:
+        data_size = len(dataset)
         # 分为训练集和验证集
-        train, val = torch.utils.data.random_split(dataset, [50000, 10000])
+        train, val = torch.utils.data.random_split(dataset, [int(data_size * 0.7), int(data_size * 0.3)])
         # 随机打乱训练集
         train_loader = DataLoader(dataset=train,
                                   batch_size=batch_size,
@@ -73,7 +88,6 @@ def load_data(train=True, batch_size=50):
                                  batch_size=batch_size,
                                  shuffle=False)
         return test_loader, None
-
 
 def train(model, epochs, batch_size, lr, log_interval=200):
     """
@@ -116,26 +130,7 @@ def train(model, epochs, batch_size, lr, log_interval=200):
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     i, batch_idx * len(data), len(train_loader.dataset),
                        100. * batch_idx / len(train_loader), loss.data.item()))
-        # 保存模型参数, 这里设定每个epoch保存一次
-        save_dir = './checkpoints'
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        torch.save(model.state_dict(), os.path.join(save_dir, 'lastest.pkl'))
-        # 测试模型在验证集上的正确率
         validate(model, val_loader, criterion)
-
-
-def test(model, batch_size):
-    """
-    测试模型在测试集上的正确率
-    :param model: 模型
-    :param batch_size: batch size
-    :return:
-    """
-    test_loader, _ = load_data(train=False, batch_size=batch_size)
-    criterion = nn.CrossEntropyLoss()
-    validate(model, test_loader, criterion)
-
 
 def validate(model, data_loader, criterion):
     """
@@ -165,45 +160,7 @@ def validate(model, data_loader, criterion):
 
     print('\nValidation set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         val_loss, correct, len(data_loader.dataset), accuracy))
-
-
-def get_args():
-    """
-    解析命令行参数
-    :return: 参数列表
-    """
-    parser = OptionParser()
-    parser.add_option('-t', '--train', action="store_true", dest='train', default=True,
-                      help='train model')
-    parser.add_option("-v", '--test', action="store_false", dest="train",
-                      help='test model')
-    parser.add_option('-e', '--epochs', dest='epochs', default=10, type='int',
-                      help='number of epochs')
-    parser.add_option('-b', '--batch_size', dest='batchsize', default=50,
-                      type='int', help='batch size')
-    parser.add_option('-l', '--lr', dest='lr', default=0.001,
-                      type='float', help='learning rate')
-    (options, args) = parser.parse_args()
-    return options
-
-
 if __name__ == '__main__':
-    args = get_args()
-    model = MLP().to(device)
-    if args.train:
-        print(model)
-        train(model, epochs=args.epochs, batch_size=args.batchsize, lr=args.lr)
-    else:
-        if not os.path.exists(model_dir):
-            print('model not found')
-        else:
-            model.load_state_dict(torch.load(model_dir))
-            test(model, batch_size=args.batchsize)
-
-# 运行示例
-
-### 训练模型
-# python mlp.py --train True --epochs 10 --batch_size 50 --lr 1e-3
-
-### 测试模型
-# python mlp.py --test True --batch_size 50
+    model = AlexNet().to(device)
+    print(model)
+    train(model, epochs=20, batch_size=50, lr=1e-3)
