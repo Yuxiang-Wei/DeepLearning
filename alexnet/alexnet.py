@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 # @Time    : 19-5-16
 # @Author  : wyxiang
-# @File    : model.py
-# @Env: Ubuntu16.04 Python3.7 pytorch1.0.1.post2 tensorboardX-1.7
+# @File    : alexnet.py
+# @Env: Ubuntu16.04 Python3.7 pytorch1.0.1.post2 tensorboardX-1.13
 import os
 import torch
 import torch.nn as nn
 from torchvision import datasets, transforms
 from torch.utils.data.dataloader import DataLoader
 from tensorboardX import SummaryWriter
+from optparse import OptionParser
 
 # 判断CUDA是否可用
 if torch.cuda.is_available():
@@ -19,17 +20,27 @@ else:
 
 print('Using PyTorch version:', torch.__version__, ' Device:', device)
 
-model_dir = './checkpoints/lastest.pkl' # 模型存放地址
+model_dir = './checkpoints/lastest.pkl'  # 模型存放地址
+
 
 class AlexNet(nn.Module):
+    """
+    AlexNet,参考自torchvision.models.alexnet
+    修改如下：
+    1. 将前两个Conv层的kernel size降为3，padding设为1，保证图片尺寸不变
+    2. 将所有的pooling层kernel_size降为2，防止图片过小
+    3. 移除average pooling层
+    4. 降低最后全连接层节点个数，加速训练
+    5. 其余均保持不变
+    """
 
     def __init__(self, num_classes=10):
         super(AlexNet, self).__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2),
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2),  # 32 -> 16
-            nn.Conv2d(64, 192, kernel_size=3, padding=2),
+            nn.Conv2d(64, 192, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2),  # 16 -> 8
             nn.Conv2d(192, 384, kernel_size=3, padding=1),
@@ -38,20 +49,21 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),  # 8 -> 4
+            nn.MaxPool2d(kernel_size=2),  # 8 -> 4
         )
         self.classifier = nn.Sequential(
             nn.Dropout(),
             nn.Linear(256 * 4 * 4, 2048),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.Linear(2048, 1024),
+            nn.Linear(2048, 2048),
             nn.ReLU(inplace=True),
-            nn.Linear(1024, num_classes),
+            nn.Linear(2048, num_classes),
         )
 
     def forward(self, x):
         x = self.features(x)
+        # 展开为一维
         x = x.view(x.size(0), 256 * 4 * 4)
         x = self.classifier(x)
         return x
@@ -68,14 +80,14 @@ def load_data(train=True, batch_size=50, shuffle=False):
         # 针对训练数据随机打乱
         shuffle = True
 
-    # 加载MNIST数据集，若不存在则下载
+    # 加载CIFAR10数据集，若不存在则下载
     dataset = datasets.CIFAR10('./data',
                                train=train,
                                download=True,
                                transform=transforms.ToTensor())
     data_loader = DataLoader(dataset=dataset,
-                              batch_size=batch_size,
-                              shuffle=shuffle)
+                             batch_size=batch_size,
+                             shuffle=shuffle)
     return data_loader
 
 
@@ -91,7 +103,7 @@ def train(model, epochs, batch_size, lr, log_interval=200):
     """
     writer = SummaryWriter()
 
-    # 加载训练集，验证集
+    # 加载训练集，测试集
     train_loader = load_data(train=True, batch_size=batch_size)
     test_loader = load_data(train=False, batch_size=batch_size)
     # 使用Adam优化器
@@ -128,16 +140,15 @@ def train(model, epochs, batch_size, lr, log_interval=200):
         # Test the model
         test_loss, test_accuracy = validate(model, test_loader, criterion)
         # write to tensorboard
-        writer.add_scalar('train/loss', train_loss / len(train_loader), i)
-        writer.add_scalar('test/loss', test_loss, i)
-        writer.add_scalar('test/accuracy', test_accuracy, i)
-
+        writer.add_scalar('train/loss', train_loss / len(train_loader), i, walltime=i)
+        writer.add_scalar('test/loss', test_loss, i, walltime=i)
+        writer.add_scalar('test/accuracy', test_accuracy, i, walltime=i)
+        writer.close() # 立刻刷新
         # 保存模型参数, 这里设定每个epoch保存一次
         save_dir = './checkpoints'
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         torch.save(model.state_dict(), os.path.join(save_dir, 'lastest.pkl'))
-    writer.close()
 
 
 def validate(model, data_loader, criterion):
@@ -171,7 +182,31 @@ def validate(model, data_loader, criterion):
     return val_loss, accuracy
 
 
+def get_args():
+    """
+    解析命令行参数
+    :return: 参数列表
+    """
+    parser = OptionParser()
+    parser.add_option('-e', '--epochs', dest='epochs', default=20, type='int',
+                      help='number of epochs')
+    parser.add_option('-b', '--batch_size', dest='batchsize', default=50,
+                      type='int', help='batch size')
+    parser.add_option('-l', '--lr', dest='lr', default=1e-3,
+                      type='float', help='learning rate')
+    parser.add_option('-m', '--load', dest='load', default=None, help='load model')
+    (options, args) = parser.parse_args()
+    return options
+
+
 if __name__ == '__main__':
+    args = get_args()
     model = AlexNet().to(device)
     print(model)
-    train(model, epochs=20, batch_size=50, lr=1e-3)
+    if args.load is not None:
+        if not os.path.exists(model_dir):
+            print('model not found')
+        else:
+            print('load exist model')
+            model.load_state_dict(torch.load(model_dir))
+    train(model, epochs=args.epochs, batch_size=args.batchsize, lr=args.lr)
