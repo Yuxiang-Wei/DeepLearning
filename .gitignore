@@ -12,6 +12,7 @@ __pycache__/
 */data
 */runs
 *.pkl
+*/cifar-10-batches-py
 
 # Distribution / packaging
 .Python
