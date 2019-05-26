@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Time    : 19-5-23
 # @Author  : wyxiang
-# @File    : dataloader.py
+# @File    : dataset.py
 # @Env: Ubuntu16.04 Python3.6
 
 from PIL import Image
