@@ -3,7 +3,7 @@
 # @Time    : 19-5-23
 # @Author  : wyxiang
 # @File    : dataset.py
-# @Env: Ubuntu16.04 Python3.6
+# @Env: Ubuntu16.04 Python3.7 pytorch1.0.1.post2
 
 from PIL import Image
 import os
@@ -16,16 +16,7 @@ import torch.utils.data as data
 class CIFAR10(data.Dataset):
     """
     读取CIFAR10数据集
-    Args:
-        root (string): the dataset file path
-        train (bool, optional): If True, creates dataset from training set, otherwise
-            creates from test set.
-        transform (callable, optional): A function/transform that takes in an PIL image
-            and returns a transformed version. E.g, ``transforms.RandomCrop``
-        target_transform (callable, optional): A function/transform that takes in the
-            target and transforms it.
     """
-
     train_list = [
         'data_batch_1',
         'data_batch_2',
@@ -51,7 +42,7 @@ class CIFAR10(data.Dataset):
         self.imgs = []
         self.labels = []
 
-        # now load the picked numpy arrays
+        # load the picked numpy arrays
         for file_name in data_list:
             file_path = os.path.join(self.root, file_name)
             if not os.path.exists(file_path):
@@ -70,27 +61,14 @@ class CIFAR10(data.Dataset):
         self.imgs = self.imgs.transpose((0, 2, 3, 1))  # convert to HWC
 
     def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is index of the target class.
-        """
         img, label = self.imgs[index], self.labels[index]
-
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
         img = Image.fromarray(img)
-
         if self.transform is not None:
             img = self.transform(img)
-
         if self.target_transform is not None:
             label = self.target_transform(label)
 
         return img, label
-
 
     def __len__(self):
         return len(self.imgs)
