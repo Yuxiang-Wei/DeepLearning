@@ -13,6 +13,7 @@ __pycache__/
 */runs
 *.pkl
 */cifar-10-batches-py
+rnn/text
 
 # Distribution / packaging
 .Python

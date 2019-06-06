@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Time    : 19-5-26
 # @Author  : wyxiang
-# @File    : train.py
+# @File    : sine_lbfgs.py
 # @Env: Ubuntu16.04 Python3.7 pytorch1.0.1.post2
 
 import torch
@@ -12,6 +12,7 @@ from torch.utils.data.dataloader import DataLoader
 from dataset import CIFAR10
 from model import ResNet
 import argparse
+from tensorboardX import SummaryWriter
 
 model_dir = './checkpoints/lastest.pkl'  # 模型存放地址
 
@@ -37,8 +38,9 @@ def train(model, epochs=10, batch_size=64, lr=1e-2, log_interval=20, device=torc
         :param log_interval: 打印loss的间隔次数
         :return:
         """
-
     print('Using PyTorch version:', torch.__version__, ' Device:', device)
+    writer = SummaryWriter()
+
     # 加载训练集，测试集
     train_loader = load_data(isTrain=True, batch_size=batch_size, shuffle=True)
     test_loader = load_data(isTrain=False, batch_size=batch_size)
@@ -74,7 +76,11 @@ def train(model, epochs=10, batch_size=64, lr=1e-2, log_interval=20, device=torc
 
         # Test the model
         test_loss, test_accuracy = validate(model, test_loader, criterion, device)
-
+        # write to tensorboard
+        writer.add_scalar('train/loss', train_loss / len(train_loader), i, walltime=i)
+        writer.add_scalar('test/loss', test_loss, i, walltime=i)
+        writer.add_scalar('test/accuracy', test_accuracy, i, walltime=i)
+        writer.close() # 立刻刷新
 
 def validate(model, data_loader, criterion, device):
     """
@@ -112,13 +118,13 @@ def boolean(s):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gpu', type=boolean, default=False,
+    parser.add_argument('--gpu', type=boolean, default=True,
                         help='use gpu or cpu ? y is gpu and n is cpu')
     parser.add_argument('--epochs', dest='epochs', default=10, type=int,
                       help='number of epochs')
     parser.add_argument('--batch_size', dest='batchsize', default=256,
                       type=int, help='batch size')
-    parser.add_argument('--lr', dest='lr', default=1e-2,
+    parser.add_argument('--lr', dest='lr', default=1e-1,
                       type=float, help='learning rate')
     args = parser.parse_args()
 

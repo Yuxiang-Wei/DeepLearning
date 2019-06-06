@@ -80,6 +80,11 @@ class ResNet(nn.Module):
         shortcut = nn.MaxPool2d(kernel_size=1, stride=stride)
         # 或者考虑1x1 conv?
         # shortcut =  nn.Conv2d(inchannel, inchannel, kernel_size=1, stride=stride)
+        # # 或者考虑conv + bn
+        # shortcut = nn.Sequential(
+        #     nn.Conv2d(inchannel, outchannel, 1, stride),
+        #     nn.BatchNorm2d(outchannel),
+        # )
         layers = []
         layers.append(ResidualBlock(inchannel, outchannel, stride, shortcut, device=self.device))
         for i in range(1, block_num):
