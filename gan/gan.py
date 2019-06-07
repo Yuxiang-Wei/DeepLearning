@@ -73,8 +73,8 @@ netD = Discriminator()
 criterion = nn.BCELoss()
 real_label = 1
 fake_label = 0
-lr = 0.00002
-epochs = 100
+lr = 0.00018
+epochs = 200
 batch_size = 400
 
 
