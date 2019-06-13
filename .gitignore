@@ -14,6 +14,8 @@ __pycache__/
 *.pkl
 */cifar-10-batches-py
 rnn/text
+gan/samples
+gan/runs
 
 # Distribution / packaging
 .Python
